@@ -1,0 +1,76 @@
+---
+title: "Precipitation Gamma Distribution"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+Initial code sent by Jill Trepanier on October 1, 2019 via email.
+
+Good morning. I hope you are doing well. I'm working on a proposal with some engineers for building a flood model for our local energy company. Have you ever worked with extended empirical saddle point density estimation (package esaddle in R)? At the end of the day, the engineers want me to provide probability density estimates with uncertainty for low, medium, and high risk scenarios for rainfall based on local data, and I'm trying to find a way that is more sophisticated than, say, just making a probability density function for a gamma distribution based on my empirical shape and rate. Perhaps the simplest way is the right one, though. I'd love to get your thoughts on it, if you can spare a moment or two. I'm in a zone of statistics where I want to verify/adjust based on someone's previous knowledge. Thanks in advance for your brain power!
+
+For the record, here is the code I've been playing with. Data attached.
+```{r}
+sher <- read.csv("BRSherwood.csv", 
+                 header = TRUE)
+sher <- subset(sher, Month >3 & Month < 10)
+observed <- sher$pcpn[sher$pcpn > 0.001]
+
+library(ggplot2)
+observed.df <- as.data.frame(observed)
+ggplot(observed.df, aes(x = observed)) +
+  geom_density() +
+  geom_rug()
+```
+
+```{r}
+library(MASS)
+fitdistr(x, "gamma")
+#shape         rate  
+#0.63271403   1.09427545
+#(0.01507048) (0.03785560)
+```
+
+```{r}
+simulated <- dgamma(seq(0, 15, .1), shape = .6327, rate = 1.094)
+simulated.df <- as.data.frame(simulated)
+
+simulatedU <- dgamma(seq(0, 15, .1), shape = .6327 + 2 * .015, rate = 1.094 - 2 * .0378)
+simulatedU.df <- as.data.frame(simulatedU)
+
+simulatedL <- dgamma(seq(0, 15, .1), shape = .6327 - 2 * .015, rate = 1.094 + 2 * .0378)
+simulatedL.df <- as.data.frame(simulatedL)
+
+ggplot(observed.df, aes(x = observed)) +
+  geom_density() +
+  geom_rug() +
+  geom_line(data = simulated.df, aes(x = seq(0, 15, .1), y = simulated), col = "red") +
+  geom_line(data = simulatedU.df, aes(x = seq(0, 15, .1), y = simulatedU), col = "blue") +
+  geom_line(data = simulatedL.df, aes(x = seq(0, 15, .1), y = simulatedL), col = "green") +
+```
+
+```{r}
+library(esaddle)
+
+x = sher$pcpn[sher$pcpn>0.001]
+xSeq <- seq(0, 15, .1)
+simulated <- dsaddle(y = xSeq, X = x, decay = 0.05, log = TRUE) # Un-normalized EES
+simulated2.df <- data.frame(simulated = exp(simulated$llk))
+
+ggplot(observed.df, aes(x = observed)) +
+  geom_density() +
+  geom_rug() +
+  geom_line(data = simulated.df, aes(x = seq(0, 15, .1), y = simulated), col = "red") +
+  geom_line(data = simulated2.df, aes(x = seq(0, 15, .1), y = simulated), col = "green") 
+
+simulated <- dsaddle(y = xSeq, X = x, decay = 0.05, normalize = TRUE, control = list("method" = "IS", nNorm = 500), log = TRUE) # EES normalized by importance sampling
+simulated3.df <- data.frame(simulated = exp(simulated$llk))
+
+ggplot(observed.df, aes(x = observed)) +
+  geom_density() +
+  geom_rug() +
+  geom_line(data = simulated.df, aes(x = seq(0, 15, .1), y = simulated), col = "red") +
+  geom_line(data = simulated2.df, aes(x = seq(0, 15, .1), y = simulated), col = "green") +
+  geom_line(data = simulated3.df, aes(x = seq(0, 15, .1), y = simulated), col = "blue") 
+```
+
